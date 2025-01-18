@@ -20,70 +20,33 @@ class QNetwork(nn.Module):
         return self.fc3(x)
 
 # Define the RL environment
-class RoguelikeEnvironment:
-    def __init__(self, initial_state):
-        self.state = initial_state
-        self.explored_pixels = set()
-        self.max_steps = 1000
-        self.current_step = 0
+class DCSSRLAgentEnvironment:
+    def __init__(self, log_data):
+        self.log_data = log_data
+        self.current_index = 0
 
     def reset(self):
-        self.state = self.get_initial_state()
-        self.explored_pixels = set()
-        self.current_step = 0
-        return self.state
-
-    def get_initial_state(self):
-        # Define the initial state attributes (example structure)
-        return {
-            'health': 100,
-            'mana': 50,
-            'position': (0, 0),
-            'inventory': [],
-            'experience': 0,
-            'explored': set(),
-        }
+        """Resets the environment to the first log entry."""
+        self.current_index = 0
+        return self.log_data[self.current_index]['state']
 
     def step(self, action):
-        # Apply the action, update state, and calculate rewards
-        reward = 0
-        done = False
+        """
+        Steps through the log data based on the action.
+        Returns the next state, reward, and done flag.
+        """
+        if self.current_index >= len(self.log_data) - 1:
+            return None, 0, True
 
-        # Example: Movement or other interactions
-        if action == 'move':
-            new_position = self._move_player(self.state['position'])
-            if new_position not in self.explored_pixels:
-                self.explored_pixels.add(new_position)
-                reward += 10  # Exploration reward
-            self.state['position'] = new_position
+        current_log = self.log_data[self.current_index]
+        next_log = self.log_data[self.current_index + 1]
 
-        # Example: Combat
-        elif action == 'attack':
-            if self._is_monster_nearby():
-                reward += 50  # Reward for defeating a monster
-            else:
-                reward -= 10  # Penalty for wasted action
+        # Simulate rewards and penalties based on parsed data
+        reward = current_log['reward'] if current_log['action'] == action else -10
+        done = (self.current_index >= len(self.log_data) - 1)
 
-        # Example: Check for penalties (e.g., taking damage)
-        if self.state['health'] <= 0:
-            reward -= 1000
-            done = True
-
-        self.current_step += 1
-        if self.current_step >= self.max_steps:
-            done = True
-
-        return self.state, reward, done
-
-    def _move_player(self, position):
-        # Update player position (placeholder logic)
-        x, y = position
-        return (x + random.choice([-1, 0, 1]), y + random.choice([-1, 0, 1]))
-
-    def _is_monster_nearby(self):
-        # Placeholder logic for monster detection
-        return random.random() > 0.5
-
+        self.current_index += 1
+        return next_log['state'], reward, done
 # Define the reinforcement learning agent
 class RLAgent:
     def __init__(self, state_size, action_size, learning_rate=0.001, gamma=0.99, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
@@ -147,8 +110,19 @@ def train_rl_agent(env, agent, episodes=1000):
 # Initialize environment and agent
 state_size = len(RoguelikeEnvironment({}).get_initial_state())
 action_size = 5  # Example: move, attack, use item, etc.
-env = RoguelikeEnvironment({})
+log_file = 'dcss_game_log.txt'
+parser = DCSSLogParser(log_file)
+parsed_log_data = parser.parse_log()
+
+# Initialize environment and RL agent
+state_size = len(parsed_log_data[0]['state']) if parsed_log_data else 0
+action_size = 5  # Example: move, attack, use item, etc.
+
+env = DCSSRLAgentEnvironment(parsed_log_data)
 agent = RLAgent(state_size, action_size)
+
+# Train the RL agent using the parsed game log
+train_rl_agent(env, agent)
 
 # Train the agent
 train_rl_agent(env, agent)
